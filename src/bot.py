@@ -162,19 +162,25 @@ async def handle_settings_input(update: Update, context):
                 )
 
 ###############################################################################
-# Основная команда анализа заказов (/scan)
+# Анализ заказов через /scan
 ###############################################################################
 
 async def scan_order(update: Update, context):
     """
-    Анализирует текстовый запрос клиента.
-    Если бесплатные чеки закончились — предлагает купить премиум-подписку.
+    Принимает заказ на анализ.
+    Может быть отправлен как текст (/scan + сообщение), так и просто фото/скриншот.
     """
+    
     chat_id = str(update.effective_chat.id)
-    r = Redis.from_url(REDIS_URL)
+    r = redis.Redis.from_url(REDIS_URL)
     master_data = r.hgetall(f"master:{chat_id}")
     
-    # ❗️ ВСТАВЬТЕ ЭТОТ БЛОК ПРОВЕРКИ ✅
+    # Проверка наличия профиля
+    if not master_data or "name" not in master_data:
+        await update.message.reply_text("Сначала настройте профиль через /settings")
+        return
+
+    # ❗️ ВАЖНЫЙ БЛОК ПРОВЕРКИ ✅
     free_checks_left = int(r.get(f"master:{chat_id}:free_checks_left") or 0)
     if free_checks_left <= 0 and not is_premium(master_data):
         keyboard = [
