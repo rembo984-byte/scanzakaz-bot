@@ -224,25 +224,25 @@ async def test_invoice(update: Update, context):
         parse_mode='Markdown'
     )
 
-def main():
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    
-    # Базовые команды и настройка профиля
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", help_command))
-    app.add_handler(CommandHandler("settings", settings))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_settings_input))
-    
-    # Анализ заказов (/scan) и поддержка фотографий
-    app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO, scan_order))
-    
-    # ВРЕМЕННАЯ КОМАНДА ДЛЯ СКРИНОТА ЮКАССА
-    app.add_handler(CommandHandler("test_invoice", test_invoice))
-    
-    # Платежи через Telegram Payments (ЮKassa)
-    app.add_handler(CallbackQueryHandler(button_callback))
-    app.add_handler(PreCheckoutQueryHandler(precheckout_callback))
-    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
+# Регистрация всех команд и событий в Telegram Bot API
+
+app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
+# Базовые команды и настройка профиля мастера
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CommandHandler("help", help_command)) # Справка о сервисе
+app.add_handler(CommandHandler("settings", settings)) # Запускает процесс настройки
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_settings_input)) 
+# ^ Этот хендлер ловит текстовые сообщения внутри /settings
+
+# Анализ заказов (/scan)
+# Поддерживает как команду + текст, так и просто фото/скриншот заказа от клиента
+app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO, scan_order))
+
+# ВРЕМЕННАЯ КОМАНДА ДЛЯ СКРИНОТА ЮКАССА
+# Эта команда отправляет тестовое сообщение с кнопками оплаты.
+# После отправки скриншота в поддержку ЮKassa её можно удалить из кода!
+app.add_handler(CommandHandler("test_invoice", test_invoice))
     
     # Запускаем бот
     print("Bot is running...")
