@@ -200,6 +200,30 @@ async def scan_order(update: Update, context):
         )
         return  # Блокируем дальнейший анализ!
 
+# ВРЕМЕННАЯ КОМАНДА ДЛЯ СКРИНОТА ЮКАССА
+async def test_invoice(update: Update, context):
+    """
+    Отправляет сообщение с кнопками покупки подписки.
+    Используется ТОЛЬКО для получения скриншота ЮKassa!
+    """
+    
+    chat_id = str(update.effective_chat.id)
+    
+    keyboard = [
+        [InlineKeyboardButton("Купить две недели", callback_data="buy_2weeks")],
+        [InlineKeyboardButton("Купить месяц", callback_data="buy_month")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "🛠️ Тестовое уведомление.\n"
+        "Выберите тариф:\n"
+        "- Две недели: ₽3800\n"
+        "- Месяц: ₽4900",
+        reply_markup=reply_markup,
+        parse_mode='Markdown'
+    )
+
     # ВАША ЛОГИКА АНАЛИЗА НАЧИНАЕТСЯ ЗДЕСЬ
     # Здесь вы делаете реальный запрос в GigaChat с вашим системным промтом A2+
     # И отправляете результат мастеру
