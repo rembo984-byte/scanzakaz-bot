@@ -224,6 +224,33 @@ async def test_invoice(update: Update, context):
         parse_mode='Markdown'
     )
 
+def main():
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    
+    # Базовые команды и настройка профиля
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("settings", settings))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_settings_input))
+    
+    # Анализ заказов (/scan) и поддержка фотографий
+    app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO, scan_order))
+    
+    # ВРЕМЕННАЯ КОМАНДА ДЛЯ СКРИНОТА ЮКАССА
+    app.add_handler(CommandHandler("test_invoice", test_invoice))
+    
+    # Платежи через Telegram Payments (ЮKassa)
+    app.add_handler(CallbackQueryHandler(button_callback))
+    app.add_handler(PreCheckoutQueryHandler(precheckout_callback))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment))
+    
+    # Запускаем бот
+    print("Bot is running...")
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
+    
     # ВАША ЛОГИКА АНАЛИЗА НАЧИНАЕТСЯ ЗДЕСЬ
     # Здесь вы делаете реальный запрос в GigaChat с вашим системным промтом A2+
     # И отправляете результат мастеру
