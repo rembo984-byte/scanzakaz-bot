@@ -96,7 +96,8 @@ async def handle_settings_input(update: Update, context):
         r.hset(master_key, "name", full_name)
         
         await update.message.reply_text(
-            f"Привет, {full_name}!\nТеперь напишите ваши целевые услуги через запятую или пробел."
+            f"Привет, {full_name}!\nТеперь напишите ваши целевые услуги через запятую или пробел.\n" 
+            "(Например: ремонт квартир, сантехника, уборка)"
         )
         context.user_data["setup_step"] = "services"
     
@@ -111,20 +112,54 @@ async def handle_settings_input(update: Update, context):
         )
         context.user_data["setup_step"] = "price"
     
-    elif step == "price":
-        price_str = text.replace(",", ".").replace("руб.", "").strip()
-        try:
-            price_value = float(price_str)
-            r.hset(master_key, "price_per_sqm", price_value)
+    elif step == "services":
+        # Проверяем, прислал ли мастер текст или файл
+        if update.message.text:
+            services_text = ",".join(update.message.text.split(","))
+            r.hset(master_key, "target_services", services_text.lower())
             
-            # Завершаем настройку
-            del context.user_data["setup_step"]
             await update.message.reply_text(
-                "🎉 Профиль сохранён!\n"
-                f"Ваш текущий профиль: {r.hgetall(master_key)}"
+                "🛠️ Отлично! Теперь отправьте ваш прайс-лист как файл\n"
+                "(Например, Excel, PDF или фото). Или просто напишите среднюю цену."
             )
-        except ValueError:
-            await update.message.reply_text("Введите число без лишних символов.")
+            context.user_data["setup_step"] = "price_file_or_text" 
+        
+        elif update.message.document:
+            # Обработка файла прайса (OCR + парсинг)
+            document = await update.message.document.get_file()
+            file_bytes = await document.download_as_bytearray()
+            
+            try:
+                import pytesseract
+                from PIL import Image
+                
+                img = Image.open(io.BytesIO(file_bytes))
+                ocr_result = pytesseract.image_to_string(img, lang='rus')
+                prices_and_services = ocr_result.strip().lower()  # Сырой текст из файла
+                
+                # Простая логика разбора: ищем числа рядом с услугами
+                price_list = []
+                for line in ocr_result.splitlines():
+                    parts = line.split(":")
+                    if len(parts) > 1 and any(char.isdigit() for char in parts[1]):
+                        service_name = parts[0].strip()
+                        price_value = float("".join(filter(str.isdigit, parts[1])))
+                        price_list.append(f"{service_name} - {price_value}")
+                
+                # Сохраняем список услуг и цен в Redis
+                r.hset(master_key, "prices_list", "\n".join(price_list))
+                
+                del context.user_data["setup_step"]
+                await update.message.reply_text(
+                    "🎉 Профиль сохранён!\n"
+                    f"Ваш текущий профиль: {r.hgetall(master_key)}"
+                )
+            except Exception as e:
+                print(f"OCR error: {e}")
+                await update.message.reply_text(
+                    "🛠️ Не удалось распознать текст в файле.\n"
+                    "Пожалуйста, пришлите прайс-лист ещё раз или введите цены текстом."
+                )
 
 ###############################################################################
 # Основная команда анализа заказов (/scan)
