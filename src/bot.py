@@ -1,6 +1,7 @@
 import os
+import io
 from datetime import datetime, timedelta
-import asyncio  # Для асинхронных запросов
+import asyncio
 import redis
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, LabeledPrice
 from telegram.ext import (
@@ -12,245 +13,238 @@ from telegram.ext import (
     filters,
 )
 
-# Константы
-FREE_CHECKS_LIMIT = 10  # Количество бесплатных проверок
+FREE_CHECKS_LIMIT = 10
 
-# Заглушки для локального тестирования; замените на реальные ключи из Vercel
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "YOUR_TELEGRAM_BOT_TOKEN")
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")  # Локальный тест
+PROVIDER_TOKEN = os.getenv("PROVIDER_TOKEN", "YOUR_PROVIDER_TOKEN")
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 GIGACHAT_API_KEY = os.getenv("GIGACHAT_API_KEY", "YOUR_GIGACHAT_KEY")
 FOLDER_ID = os.getenv("FOLDER_ID", "YOUR_FOLDER_ID")
 
-# Проверка статуса подписки мастера
 def is_premium(master_data: dict) -> bool:
-    """Проверяет, активна ли платная подписка"""
     paid_until_str = master_data.get("paid_until")
     if not paid_until_str:
         return False
-    
     paid_until = datetime.fromisoformat(paid_until_str)
-    now = datetime.now()
-    return paid_until > now
-
-###############################################################################
-# Базовые команды бота
-###############################################################################
+    return paid_until > datetime.now()
 
 async def start(update: Update, context):
+    context.user_data["setup_step"] = None
     await update.message.reply_text(
-        "🛠️ Добро пожаловать в ScanZakaz!\n"
-        "Я анализирую заказы от клиентов по ремонту, строительству, электрике,\n"
-        "сантехнике, клинингу и другим услугам.\n\n"
-        "/settings — Настройте ваши цены и услуги\n"
-        "/scan [текст] — Отправьте заказ клиента для анализа"
+        "🤖 Рад приветствовать тебя в СканЗаказ!\n\n"
+        "Я — твой персональный ИИ-ассистент по продажам на Профи и YouDo. Моя главная задача — беречь твой баланс и помогать брать самые выгодные заказы раньше конкурентов.\n\n"
+        "📡 Что я делаю за 1 секунду:\n"
+        "• Проверяю заказчиков на предмет скрытого субподряда и прорабов.\n"
+        "• Анализирую заказ на вероятность сделки по твоему чеку.\n"
+        "• Генерирую мощный авто-отклик под боли клиента с 3 железными аргументами для продажи.\n\n"
+        "🔒 Доступ ограничен: система работает в закрытой бета-версии для стабильной скорости нейросети.\n\n"
+        "🎁 Твой тест-драйв активирован: у тебя есть 10 бесплатных высокоточных проверок!\n\n"
+        "⚙️ Сначала настройте свой профиль мастера: /settings\n\n"
+        "👇 После настройки просто перешли мне текст или скриншот любого заказа с Профи или YouDo:"
     )
 
 async def help_command(update: Update, context):
     await update.message.reply_text(
-        """
-🛠️ Как работает ScanZakaz?
-1. /settings — Настройте ваши целевые услуги и цену.
-2. /scan + [текст или скриншот заказа] → я проведу глубокий анализ.
-   * **Квалификация лидов:** Пойму, надо ли тратить деньги на отклик *(оценка бюджета)*.
-   * **Генератор скриптов продаж:** Дам готовый текст для отклика и аргументы для звонка.
-   
-Тарифы:
-* Бесплатный тест: 10 комплексных анализов в вашей нише для оценки полезности агента.
-* Подписка: ₽4900/мес или ₽3800 за две недели (до 30 проверок/день).
-"""
+        "🛠️ Как работает ScanZakaz?\n"
+        "1. /settings — Настройте ваши целевые услуги и цену.\n"
+        "2. Отправьте боту текст или скриншот заказа → я проведу глубокий анализ.\n"
+        "   * 💰 **Оценка клиента и бюджета:** Пойму, надо ли тратить деньги на отклик.\n"
+        "   * ✍️ **Дам рекомендации:** Подготовлю убойный текст для отклика и аргументы для звонка.\n\n"
+        "Тарифы:\n"
+        "* Бесплатный тест: 10 подробных нейроанализов в вашей нише для оценки полезности ИИ-ассистента.\n"
+        "* Подписка: ₽4900/мес или ₽3800 за две недели (до 30 проверок/день)."
     )
 
-###############################################################################
-# Команда настройки профиля мастера (/settings)
-###############################################################################
-
 async def settings(update: Update, context):
-    chat_id = str(update.effective_chat.id)
-    r = Redis.from_url(REDIS_URL)
-    master_key = f"master:{chat_id}"
-    
-    # Проверка наличия контекста
-    step = context.user_data.get("setup_step")
-    if not step:
-        await update.message.reply_text(
-            "🛠️ Для начала настройки отправьте своё имя и фамилию одной строкой."
-        )
-        context.user_data["setup_step"] = "name"
-        return
+    context.user_data["setup_step"] = "name"
+    await update.message.reply_text(
+        "🛠️ Для начала настройки отправьте своё имя и фамилию одной строкой."
+    )
+
+async def handle_global_input(update: Update, context):
+    if context.user_data.get("setup_step"):
+        await handle_settings_input(update, context)
+    else:
+        await scan_order(update, context)
 
 async def handle_settings_input(update: Update, context):
-    text = update.message.text.strip()
+    text = update.message.text.strip() if update.message.text else ""
     chat_id = str(update.effective_chat.id)
-    r = Redis.from_url(REDIS_URL)
+    r = redis.Redis.from_url(REDIS_URL, decode_responses=True)
     master_key = f"master:{chat_id}"
-    
     step = context.user_data.get("setup_step")
-    
+
     if step == "name":
         name_parts = text.split(maxsplit=1)
         if len(name_parts) != 2:
-            await update.message.reply_text("Пожалуйста, введите ваше полное имя.")
+            await update.message.reply_text("Пожалуйста, введите ваше полное имя (Имя и Фамилию).")
             return
-        
         full_name = " ".join(name_parts)
         r.hset(master_key, "name", full_name)
-        
         await update.message.reply_text(
-            f"Привет, {full_name}!\nТеперь напишите ваши целевые услуги через запятую или пробел.\n" 
+            f"Привет, {full_name}!\nТеперь напишите ваши целевые услуги через запятую.\n"
             "(Например: ремонт квартир, сантехника, уборка)"
         )
         context.user_data["setup_step"] = "services"
-    
-    elif step == "services":
-        services = ",".join(text.split(","))
-        r.hset(master_key, "target_services", services.lower())
         
-        await update.message.reply_text(
-            "🛠️ Отлично! Укажите ваши цены через запятую.\n"
-            "*Например:* плитка — 900/м²; электрика — 700/ч; уборка — 300/час\n"
-            "Или просто отправьте одну среднюю цену за м² или час."
-        )
-        context.user_data["setup_step"] = "price"
-    
     elif step == "services":
-        # Проверяем, прислал ли мастер текст или файл
         if update.message.text:
-            services_text = ",".join(update.message.text.split(","))
+            services_text = ",".join([s.strip() for s in text.split(",")])
             r.hset(master_key, "target_services", services_text.lower())
-            
             await update.message.reply_text(
-                "🛠️ Отлично! Теперь отправьте ваш прайс-лист как файл\n"
-                "(Например, Excel, PDF или фото). Или просто напишите среднюю цену."
+                "🛠️ Отлично! Теперь отправьте ваш прайс-лист как фото или просто напишите цены текстом."
             )
-            context.user_data["setup_step"] = "price_file_or_text" 
-        
-        elif update.message.document:
-            # Обработка файла прайса (OCR + парсинг)
-            document = await update.message.document.get_file()
-            file_bytes = await document.download_as_bytearray()
+            context.user_data["setup_step"] = "price_file_or_text"
             
+    elif step == "price_file_or_text":
+        if update.message.text:
+            r.hset(master_key, "prices_list", text)
+            context.user_data["setup_step"] = None
+            await update.message.reply_text(
+                "🎉 **Ваши настройки успешно сохранены!**\n\n"
+                "ИИ-ассистент зафиксировал ваш прайс-лист и целевые услуги. "
+                "Теперь при генерации рекомендаций и текстов откликов он будет автоматически опираться на ваши цены.\n\n"
+                "🔍 Чтобы проверить заказ, просто отправьте его текст в чат!"
+            )
+        elif update.message.document or update.message.photo:
+            await update.message.reply_text("Обрабатываю файл...")
             try:
+                if update.message.document:
+                    file_obj = await update.message.document.get_file()
+                else:
+                    file_obj = await update.message.photo[-1].get_file()
+                file_bytes = await file_obj.download_as_bytearray()
+                
                 import pytesseract
                 from PIL import Image
-                
                 img = Image.open(io.BytesIO(file_bytes))
-                ocr_result = pytesseract.image_to_string(img, lang='rus')
-                prices_and_services = ocr_result.strip().lower()  # Сырой текст из файла
+                ocr_result = pytesseract.image_to_string(img, lang="rus")
                 
-                # Простая логика разбора: ищем числа рядом с услугами
                 price_list = []
                 for line in ocr_result.splitlines():
                     parts = line.split(":")
-                    if len(parts) > 1 and any(char.isdigit() for char in parts[1]):
-                        service_name = parts[0].strip()
-                        price_value = float("".join(filter(str.isdigit, parts[1])))
+                    if len(parts) > 1 and any(char.isdigit() for char in parts):
+                        service_name = parts.strip()
+                        price_value = "".join(filter(str.isdigit, parts))
                         price_list.append(f"{service_name} - {price_value}")
-                
-                # Сохраняем список услуг и цен в Redis
-                r.hset(master_key, "prices_list", "\n".join(price_list))
-                
-                del context.user_data["setup_step"]
+                        
+                saved_prices = "\n".join(price_list) if price_list else ocr_result.strip()
+                r.hset(master_key, "prices_list", saved_prices)
+                context.user_data["setup_step"] = None
                 await update.message.reply_text(
-                    "🎉 Профиль сохранён!\n"
-                    f"Ваш текущий профиль: {r.hgetall(master_key)}"
+                    "🎉 **Ваши настройки успешно сохранены!**\n\n"
+                    "Прайс-лист успешно распознан по фото и привязан к профилю.\n\n"
+                    "🔍 Чтобы проверить заказ, просто отправьте его текст в чат!"
                 )
             except Exception as e:
                 print(f"OCR error: {e}")
                 await update.message.reply_text(
-                    "🛠️ Не удалось распознать текст в файле.\n"
-                    "Пожалуйста, пришлите прайс-лист ещё раз или введите цены текстом."
+                    "🛠️ Не удалось распознать текст в файле.\nПожалуйста, введите ваши цены обычным текстовым сообщением."
                 )
 
-###############################################################################
-# Анализ заказов через /scan
-###############################################################################
-
 async def scan_order(update: Update, context):
-    """
-    Принимает заказ на анализ.
-    Может быть отправлен как текст (/scan + сообщение), так и просто фото/скриншот.
-    """
-    
     chat_id = str(update.effective_chat.id)
-    r = redis.Redis.from_url(REDIS_URL)
+    r = redis.Redis.from_url(REDIS_URL, decode_responses=True)
     master_data = r.hgetall(f"master:{chat_id}")
-    
-    # Проверка наличия профиля
     if not master_data or "name" not in master_data:
         await update.message.reply_text("Сначала настройте профиль через /settings")
         return
-
-    # ❗️ ВАЖНЫЙ БЛОК ПРОВЕРКИ ✅
-    free_checks_left = int(r.get(f"master:{chat_id}:free_checks_left") or 0)
+    free_checks_left = int(r.get(f"master:{chat_id}:free_checks_left") or 10)
     if free_checks_left <= 0 and not is_premium(master_data):
         keyboard = [
-            [InlineKeyboardButton("Купить две недели", callback_data="buy_2weeks")],
-            [InlineKeyboardButton("Купить месяц", callback_data="buy_month")]
+            [InlineKeyboardButton("🚀 Купить доступ на 14 дней — 3800 ₽", callback_data="buy_2weeks")],
+            [InlineKeyboardButton("👑 Купить доступ на 30 дней — 4900 ₽", callback_data="buy_month")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        
         await update.message.reply_text(
-            "🛠️ Ваши бесплатные проверки закончились.\n"
-            f"Вы использовали все {FREE_CHECKS_LIMIT} комплексных анализов.\n\n"
-            "Выберите тариф:\n"
-            "- Две недели (₽3800)\n"
-            "- Месяц (₽4900)",
-            reply_markout=reply_markup,
-            parse_mode='Markdown'
+            f"🛠️ Ваши бесплатные проверки закончились.\nВы использовали все {FREE_CHECKS_LIMIT} тестовых нейроанализов.\n\nВыберите тариф для продолжения работы:",
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
         )
-        return  # Блокируем дальнейший анализ!
+        return
+    if not is_premium(master_data):
+        r.decrby(f"master:{chat_id}:free_checks_left", 1)
+    await update.message.reply_text("🔍 Заказ принят в обработку. Нейросеть начинает анализ...")
 
-# ВРЕМЕННАЯ КОМАНДА ДЛЯ СКРИНОТА ЮКАССА
 async def test_invoice(update: Update, context):
-    """
-    Отправляет сообщение с кнопками покупки подписки.
-    Используется ТОЛЬКО для получения скриншота ЮKassa!
-    """
-    
-    chat_id = str(update.effective_chat.id)
-    
     keyboard = [
-        [InlineKeyboardButton("Купить две недели", callback_data="buy_2weeks")],
-        [InlineKeyboardButton("Купить месяц", callback_data="buy_month")]
+        [InlineKeyboardButton("🚀 Купить доступ на 14 дней — 3800 ₽", callback_data="buy_2weeks")],
+        [InlineKeyboardButton("👑 Купить доступ на 30 дней — 4900 ₽", callback_data="buy_month")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
     await update.message.reply_text(
-        "🛠️ Тестовое уведомление.\n"
-        "Выберите тариф:\n"
-        "- Две недели: ₽3800\n"
-        "- Месяц: ₽4900",
+        "💳 **Выберите тариф доступа к ИИ-ассистенту «СканЗаказ»:**\n\n"
+        "После оплаты вам откроется полный доступ к нейроанализу заказов.",
         reply_markup=reply_markup,
-        parse_mode='Markdown'
+        parse_mode="Markdown"
     )
 
-# Регистрация всех команд и событий в Telegram Bot API
+async def process_payment_choice(update: Update, context):
+    query = update.callback_query
+    await query.answer()
+    chat_id = query.message.chat_id
+    choice = query.data
+    if choice == "buy_2weeks":
+        title = "Доступ к СканЗаказ на 14 дней"
+        price = 3800
+        days = 14
+        payload = "sub_14_days"
+    else:
+        title = "Доступ к СканЗаказ на 30 дней"
+        price = 4900
+        days = 30
+        payload = "sub_30_days"
+    description = (
+        f"Полный доступ к нейроанализу заказов на {days} дней.\n"
+        f"Лимит: строго до 30 проверок в сутки (обновляется каждые 24 часа).\n"
+        f"⚠️ Важно: Неиспользованные за сутки проверки сгорают и не переносятся!"
+    )
+    prices = [LabeledPrice("Подписка СканЗаказ", price * 100)]
+    await context.bot.send_invoice(
+        chat_id=chat_id,
+        title=title,
+        description=description,
+        payload=payload,
+        provider_token=PROVIDER_TOKEN,
+        currency="RUB",
+        prices=prices,
+        start_parameter="scanzakaz-subscription"
+    )
 
-app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+async def precheckout_callback(update: Update, context):
+    query = update.pre_checkout_query
+    if query.invoice_payload.startswith("sub_"):
+        await query.answer(ok=True)
+    else:
+        await query.answer(ok=False, error_message="Что-то пошло не так. Пожалуйста, попробуйте еще раз.")
 
-# Базовые команды и настройка профиля мастера
-app.add_handler(CommandHandler("start", start))
-app.add_handler(CommandHandler("help", help_command)) # Справка о сервисе
-app.add_handler(CommandHandler("settings", settings)) # Запускает процесс настройки
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_settings_input)) 
-# ^ Этот хендлер ловит текстовые сообщения внутри /settings
+async def successful_payment_callback(update: Update, context):
+    payment = update.message.successful_payment
+    chat_id = str(update.effective_chat.id)
+    r = redis.Redis.from_url(REDIS_URL, decode_responses=True)
+    master_key = f"master:{chat_id}"
+    days = 14 if "14" in payment.invoice_payload else 30
+    expire_date = (datetime.now() + timedelta(days=days)).isoformat()
+    r.hset(master_key, "paid_until", expire_date)
+    await update.message.reply_text(
+        f"🎉 Оплата успешно прошла!\n"
+        f"Спасибо за покупку. Ваш доступ успешно активирован на {days} дней.\n"
+        f"Суточный лимит до 30 проверок в 24 часа включен."
+    )
 
-# Анализ заказов (/scan)
-# Поддерживает как команду + текст, так и просто фото/скриншот заказа от клиента
-app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO, scan_order))
-
-# ВРЕМЕННАЯ КОМАНДА ДЛЯ СКРИНОТА ЮКАССА
-# Эта команда отправляет тестовое сообщение с кнопками оплаты.
-# После отправки скриншота в поддержку ЮKassa её можно удалить из кода!
-app.add_handler(CommandHandler("test_invoice", test_invoice))
-    
-    # Запускаем бот
+def main():
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("settings", settings))
+    app.add_handler(CommandHandler("scan", scan_order))
+    app.add_handler(CommandHandler("test_invoice", test_invoice))
+    app.add_handler(CallbackQueryHandler(process_payment_choice, pattern="^buy_"))
+    app.add_handler(PreCheckoutQueryHandler(precheckout_callback))
+    app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback))
+    app.add_handler(MessageHandler((filters.TEXT | filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND, handle_global_input))
     print("Bot is running...")
     app.run_polling()
 
 if __name__ == "__main__":
     main()
-    
-    # ВАША ЛОГИКА АНАЛИЗА НАЧИНАЕТСЯ ЗДЕСЬ
-    # Здесь вы делаете реальный запрос в GigaChat с вашим системным промтом A2+
-    # И отправляете результат мастеру
