@@ -185,7 +185,9 @@ async def test_invoice(update: Update, context):
 async def process_payment_choice(update: Update, context):
     query = update.callback_query
     await query.answer()
-    chat_id = query.message.chat_id
+    
+    chat_id = update.effective_chat.id
+    
     choice = query.data
     if choice == "buy_2weeks":
         title = "Доступ к СканЗаказ на 14 дней"
@@ -197,12 +199,31 @@ async def process_payment_choice(update: Update, context):
         price = 4900
         days = 30
         payload = "sub_30_days"
+        
     description = (
         f"Полный доступ к нейроанализу заказов на {days} дней.\n"
         f"Лимит: строго до 30 проверок в сутки (обновляется каждые 24 часа).\n"
         f"⚠️ Важно: Неиспользованные за сутки проверки сгорают и не переносятся!"
     )
     prices = [LabeledPrice("Подписка СканЗаказ", price * 100)]
+    
+    import json
+    provider_data = {
+        "receipt": {
+            "items": [
+                {
+                    "description": title,
+                    "quantity": "1.00",
+                    "amount": {
+                        "value": f"{price}.00",
+                        "currency": "RUB"
+                    },
+                    "vat_code": 1
+                }
+            ]
+        }
+    }
+
     await context.bot.send_invoice(
         chat_id=chat_id,
         title=title,
@@ -211,7 +232,8 @@ async def process_payment_choice(update: Update, context):
         provider_token=PROVIDER_TOKEN,
         currency="RUB",
         prices=prices,
-        start_parameter="scanzakaz-subscription"
+        start_parameter="scanzakaz-subscription",
+        provider_data=json.dumps(provider_data)
     )
 
 async def precheckout_callback(update: Update, context):
