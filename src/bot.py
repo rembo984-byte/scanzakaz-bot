@@ -183,12 +183,16 @@ async def test_invoice(update: Update, context):
     )
 
 async def process_payment_choice(update: Update, context):
+    import json
     query = update.callback_query
     await query.answer()
     
-    chat_id = update.effective_chat.id
+    # Печатаем лог в терминал Codespaces, чтобы увидеть, что кнопка СРАБОТАЛА
+    print(f"--- НАЖАТИЕ НА КНОПКУ ПОЙМАНО! Callback data: {query.data} ---")
     
+    chat_id = update.effective_chat.id
     choice = query.data
+    
     if choice == "buy_2weeks":
         title = "Доступ к СканЗаказ на 14 дней"
         price = 3800
@@ -202,12 +206,10 @@ async def process_payment_choice(update: Update, context):
         
     description = (
         f"Полный доступ к нейроанализу заказов на {days} дней.\n"
-        f"Лимит: строго до 30 проверок в сутки (обновляется каждые 24 часа).\n"
-        f"⚠️ Важно: Неиспользованные за сутки проверки сгорают и не переносятся!"
+        f"Лимит: строго до 30 проверок в сутки."
     )
     prices = [LabeledPrice("Подписка СканЗаказ", price * 100)]
     
-    import json
     provider_data = {
         "receipt": {
             "items": [
@@ -223,6 +225,19 @@ async def process_payment_choice(update: Update, context):
             ]
         }
     }
+
+    print("--- ОТПРАВЛЯЕМ ИНВОЙС В ТЕЛЕГРАМ ---")
+    await context.bot.send_invoice(
+        chat_id=chat_id,
+        title=title,
+        description=description,
+        payload=payload,
+        provider_token=PROVIDER_TOKEN,
+        currency="RUB",
+        prices=prices,
+        start_parameter="scanzakaz-subscription",
+        provider_data=json.dumps(provider_data)
+    )
 
     await context.bot.send_invoice(
         chat_id=chat_id,
@@ -264,7 +279,7 @@ def main():
     app.add_handler(CommandHandler("settings", settings))
     app.add_handler(CommandHandler("scan", scan_order))
     app.add_handler(CommandHandler("test_invoice", test_invoice))
-    app.add_handler(CallbackQueryHandler(process_payment_choice, pattern="^buy_"))
+    app.add_handler(CallbackQueryHandler(process_payment_choice))
     app.add_handler(PreCheckoutQueryHandler(precheckout_callback))
     app.add_handler(MessageHandler(filters.SUCCESSFUL_PAYMENT, successful_payment_callback))
     app.add_handler(MessageHandler((filters.TEXT | filters.PHOTO | filters.Document.ALL) & ~filters.COMMAND, handle_global_input))
