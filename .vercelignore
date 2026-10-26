@@ -1,4 +1,3 @@
-vercel deploy --prod
 .env*
 node_modules/
 .git/
