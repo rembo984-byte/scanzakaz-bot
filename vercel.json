@@ -1,11 +1,11 @@
 {
   "functions": {
-    "api/*": { 
-      "includeFiles": ["app/**"], // Подключает весь пакет app/
-      "maxDuration": 60          // Важно! По умолчанию у Vercel 10 секунд, а анализ заказа идёт дольше
+    "api/index.py": {
+      "includeFiles": "app/**",
+      "maxDuration": 60
     }
   },
   "rewrites": [
-    {"source": "/(.*)", "destination": "/api/index.py"}
+    { "source": "/(.*)", "destination": "/api/index" }
   ]
 }
