@@ -32,6 +32,7 @@ _AMOUNT_RE = re.compile(
 )
 
 _BUDGET_HINT = re.compile(r"бюджет|стоимост|цена|заплат", re.I)
+_MATERIALS_LINE = re.compile(r"материал", re.I)
 
 
 def parse_amount(raw: str) -> int | None:
@@ -49,13 +50,18 @@ def parse_amount(raw: str) -> int | None:
 
 
 def parse_budget(text: str) -> int | None:
-    """Сначала строка со словом 'бюджет', иначе самая крупная сумма в тексте."""
+    """Строка со словом 'бюджет', минуя строки про материалы."""
     fixed = fix_ocr(text)
+
     for line in fixed.splitlines():
-        if _BUDGET_HINT.search(line):
+        if _BUDGET_HINT.search(line) and not _MATERIALS_LINE.search(line):
             amount = parse_amount(line)
             if amount:
                 return amount
+
+    if _MATERIALS_LINE.search(fixed) and _EXPLICIT.search(fixed):
+        return None
+
     return parse_amount(fixed)
 
 
