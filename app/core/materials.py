@@ -124,7 +124,3 @@ def _fork(price: int, budget: int) -> MaterialsVerdict:
         ),
         adds_penalty=True,
     )
-            f"не проходит: на материалы остаётся {fmt(max(room, 0))} ₽ "
-            f"({max(room, 0) / budget:.0%} бюджета) — для объекта этого мало"
-        ),
-    )
