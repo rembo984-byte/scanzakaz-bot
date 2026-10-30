@@ -67,5 +67,14 @@ def test_no_budget_no_bonus():
 
 
 def test_reasons_collected():
-    a = build(12000, 3500, mat="pass", penalty=PENALTY_CAP)
-    assert len(a.reasons) == 2
+    profile = Profile(user_id=1, min_order_price=3500)
+    order = Order(budget=12000)
+    a = assess(
+        profile,
+        order,
+        money=Money(3500, "min"),
+        materials=MaterialsVerdict("pass", note="материалы клиента"),
+        econ=ResponseEconomics(verdict="worth", cost=300),
+        logistics=LogisticsVerdict(0, note="20 км в одну сторону"),
+    )
+    assert len(a.reasons) == 3
