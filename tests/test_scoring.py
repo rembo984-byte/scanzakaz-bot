@@ -6,7 +6,6 @@ from app.core.scoring import PENALTY_CAP, assess, verdict_for
 
 
 def build(
-    materials=MaterialsVerdict(mat, adds_penalty=(mat == "fail")),
     budget: int | None,
     price: int,
     mat: str = "pass",
@@ -19,7 +18,7 @@ def build(
         profile,
         order,
         money=Money(price, "min"),
-        materials=MaterialsVerdict(mat),
+        materials=MaterialsVerdict(mat, adds_penalty=(mat == "fail")),
         econ=ResponseEconomics(verdict=econ, cost=300),
         logistics=LogisticsVerdict(penalty),
     )
