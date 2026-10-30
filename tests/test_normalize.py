@@ -93,10 +93,5 @@ def test_budget_ignores_materials_line():
     assert parse_budget(text) == 250_000
 
 
-def test_budget_ignores_materials_line():
-    text = "Стоимость материалов 45 000 ₽\nБюджет 250 000 ₽"
-    assert parse_budget(text) == 250_000
-
-
 def test_no_budget_when_only_materials_sum():
     assert parse_budget("Ремонт\nМатериалы на 45 000 ₽") is None
