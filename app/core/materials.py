@@ -17,6 +17,7 @@ class MaterialsVerdict:
     work_budget: int | None = None    # сколько остаётся на работу
     materials_room: int | None = None # сколько остаётся на материалы
     note: str = ""
+    adds_penalty: bool = False        # провал несёт новое знание, а не повторяет бюджет
 
 
 def assess(profile: Profile, order: Order, money: Money) -> MaterialsVerdict:
@@ -38,32 +39,36 @@ def assess(profile: Profile, order: Order, money: Money) -> MaterialsVerdict:
         )
 
     if order.materials is MaterialMode.CLIENT:
-        return _direct(price, budget, "материалы клиента — сравниваю работу с бюджетом")
+        return _direct(price, budget, "материалы клиента")
 
     if order.materials is MaterialMode.EXPLICIT and order.materials_sum:
         work_budget = budget - order.materials_sum
         if work_budget <= 0:
             return MaterialsVerdict(
                 "fail",
-                work_budget=max(work_budget, 0),
+                work_budget=0,
                 materials_room=order.materials_sum,
                 note=f"материалы {fmt(order.materials_sum)} ₽ съедают бюджет целиком",
+                adds_penalty=True,
             )
         return _direct(
             price,
             work_budget,
             f"материалы {fmt(order.materials_sum)} ₽, на работу остаётся {fmt(work_budget)} ₽",
+            adds_penalty=True,
         )
 
     if order.materials is MaterialMode.INCLUSIVE:
         return _fork(price, budget)
 
-    return _direct(
-        price, budget, "материалы не указаны — считаю, что бюджет только за работу"
+    return MaterialsVerdict(
+        "unknown", note="не указаны — считаю, что бюджет только за работу"
     )
 
 
-def _direct(price: int, budget: int, note: str) -> MaterialsVerdict:
+def _direct(
+    price: int, budget: int, note: str, adds_penalty: bool = False
+) -> MaterialsVerdict:
     """Материалы не смешиваются с работой: прямое сравнение."""
     if price <= budget:
         return MaterialsVerdict(
@@ -75,6 +80,7 @@ def _direct(price: int, budget: int, note: str) -> MaterialsVerdict:
         "fail",
         work_budget=budget,
         note=f"{note}; ваш расчёт {fmt(price)} ₽ выше на {fmt(price - budget)} ₽",
+        adds_penalty=adds_penalty,
     )
 
 
@@ -105,6 +111,7 @@ def _fork(price: int, budget: int) -> MaterialsVerdict:
                 f"проходит, только если материалы дороже {fmt(room)} ₽ "
                 f"({room / budget:.0%} бюджета)"
             ),
+            adds_penalty=True,
         )
 
     return MaterialsVerdict(
@@ -112,6 +119,11 @@ def _fork(price: int, budget: int) -> MaterialsVerdict:
         work_budget=price,
         materials_room=max(room, 0),
         note=(
+            f"не проходит: на материалы остаётся {fmt(max(room, 0))} ₽ "
+            f"({max(room, 0) / budget:.0%} бюджета) — для объекта этого мало"
+        ),
+        adds_penalty=True,
+    )
             f"не проходит: на материалы остаётся {fmt(max(room, 0))} ₽ "
             f"({max(room, 0) / budget:.0%} бюджета) — для объекта этого мало"
         ),
