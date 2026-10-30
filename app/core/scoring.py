@@ -11,6 +11,8 @@ from app.core.models import Money, Order, Profile
 PENALTY_CAP = 20
 TAKE_THRESHOLD = 70
 THINK_THRESHOLD = 45
+MATERIALS_BONUS = 10
+MATERIALS_PENALTY = 15
 
 
 @dataclass(frozen=True)
@@ -45,8 +47,12 @@ def _budget_points(budget: int | None, money: Money) -> tuple[int, str]:
     return -25, f"вы дороже бюджета на {delta:.0%}"
 
 
-def _materials_points(verdict: str) -> int:
-    return {"pass": 10, "borderline": 0, "fail": -15}.get(verdict, 0)
+def _materials_points(materials: MaterialsVerdict) -> int:
+    if materials.verdict == "pass":
+        return MATERIALS_BONUS
+    if materials.verdict == "fail" and materials.adds_penalty:
+        return -MATERIALS_PENALTY
+    return 0
 
 
 def _econ_points(verdict: str) -> int:
@@ -65,7 +71,7 @@ def assess(
     points, budget_note = _budget_points(order.budget, money)
 
     score = 50 + points
-    score += _materials_points(materials.verdict)
+    score += _materials_points(materials)
     score += _econ_points(econ.verdict)
     score -= min(logistics.penalty, PENALTY_CAP)
     score = max(0, min(100, score))
