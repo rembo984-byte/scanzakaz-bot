@@ -53,3 +53,4 @@ def _econ(a: Assessment) -> str:
     if e.verdict == "worth":
         share = str(e.share_pct).replace(".", ",")
         return f"Отклик {e.cost} ₽ ({share}% чека) — окупается с запасом."
+return f"Отклик {e.cost} ₽. Порог окупаемости — {_fmt(e.break_even or 0)} ₽."
