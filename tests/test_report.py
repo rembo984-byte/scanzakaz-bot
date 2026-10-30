@@ -35,7 +35,9 @@ def test_price_line():
 
 
 def test_worth_line():
-    assert "окупается с запасом" in build()
+    text = build()
+    assert "окупается с запасом" in text
+    assert "(2,5% чека)" in text
 
 
 def test_waste_line():
