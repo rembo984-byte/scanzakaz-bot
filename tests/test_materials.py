@@ -25,6 +25,7 @@ def test_client_fail():
     v = assess(prof(), Order(budget=2500, materials=MaterialMode.CLIENT), Money(3500, "min"))
     assert v.verdict == "fail"
     assert v.work_budget == 2500
+    assert v.adds_penalty is False
 
 
 def test_explicit_pass():
@@ -60,6 +61,7 @@ def test_inclusive_fail():
     v = assess(prof(), order, Money(900000, "min"))
     assert v.verdict == "fail"
     assert v.materials_room == 300000
+    assert v.adds_penalty is True
 
 
 def test_construction_no_verdict():
@@ -68,9 +70,10 @@ def test_construction_no_verdict():
     assert v.verdict == "unknown"
 
 
-def test_unknown_mode_compares_with_budget():
+def test_unknown_mode_is_neutral():
     v = assess(prof(), Order(budget=5000, materials=MaterialMode.UNKNOWN), Money(3500, "min"))
-    assert v.verdict == "pass"
+    assert v.verdict == "unknown"
+    assert v.adds_penalty is False
 
 
 def test_no_budget():
