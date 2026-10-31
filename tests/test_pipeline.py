@@ -86,6 +86,7 @@ def test_no_budget_does_not_crash():
     a, order = run("Замена смесителя", prof())
     assert a.money.amount == 3500
     assert a.materials.verdict == "unknown"
+    assert a.score == 65
     text = render(a, order)
     assert "Порог окупаемости" in text
 
@@ -97,8 +98,8 @@ def test_no_budget_good_card_is_take():
     assert order.budget is None
     assert a.money.amount == 90000
     assert a.materials.verdict == "pass"
-    assert a.score == 70
+    assert a.score == 75
     assert a.verdict == "take"
     text = render(a, order)
-    assert "🟢 Брать · 70/100" in text
+    assert "🟢 Брать · 75/100" in text
     assert "Бюджета в карточке нет" in text
