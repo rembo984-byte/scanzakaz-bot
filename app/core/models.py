@@ -53,6 +53,8 @@ class Profile:
     turnkey_rate: int | None = None   # цена за м² объекта под ключ
     response_cost: int = 0            # цена одного отклика
     visit_cost: int = 0               # цена выезда, подсказкой в отчёте
+    margin: float = 0.0               # доля прибыли; 0 = взять по сегменту
+    conversion: float = 0.0           # конверсия отклика; 0 = взять 0.15
     travel_mode: str = "radius"       # radius | anywhere
     travel_radius_km: float = 30.0
 
@@ -73,6 +75,12 @@ class Profile:
         if not self.travel_radius_km or self.travel_radius_km <= 0:
             self.travel_radius_km = 30.0
 
+        # 0 или мусор -> economics возьмёт значение по сегменту
+        if not (0 < self.margin <= 1):
+            self.margin = 0.0
+        if not (0 < self.conversion <= 1):
+            self.conversion = 0.0
+
     def as_dict(self) -> dict:
         """Готово к json.dumps и к Redis: enum-ы уже строками."""
         return {
@@ -84,6 +92,8 @@ class Profile:
             "turnkey_rate": self.turnkey_rate,
             "response_cost": self.response_cost,
             "visit_cost": self.visit_cost,
+            "margin": self.margin,
+            "conversion": self.conversion,
             "travel_mode": self.travel_mode,
             "travel_radius_km": self.travel_radius_km,
         }
