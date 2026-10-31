@@ -1,7 +1,9 @@
-# api/index.py
+"""Точка входа Vercel. Маршруты живут в app/main.py — здесь только sys.path и app."""
+import sys
+from pathlib import Path
 
-from app.main import app
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
-@app.get("/health")
-async def health():
-    return {"ok": True}
+from app.main import app  # noqa: E402
