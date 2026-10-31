@@ -88,3 +88,17 @@ def test_no_budget_does_not_crash():
     assert a.materials.verdict == "unknown"
     text = render(a, order)
     assert "Порог окупаемости" in text
+
+
+def test_no_budget_good_card_is_take():
+    a, order = run(
+        "Укладка плитки в ванной\nПлощадь 6 м2\nМатериалы клиента", prof()
+    )
+    assert order.budget is None
+    assert a.money.amount == 90000
+    assert a.materials.verdict == "pass"
+    assert a.score == 70
+    assert a.verdict == "take"
+    text = render(a, order)
+    assert "🟢 Брать · 70/100" in text
+    assert "Бюджета в карточке нет" in text
