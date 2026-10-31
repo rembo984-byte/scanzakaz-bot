@@ -70,6 +70,13 @@ def test_place_returns_whole_line():
     assert order.place == "Московская область, Одинцово"
 
 
+def test_place_prefers_district_over_region():
+    order = extract(
+        "Ремонт квартиры\nОбласть: Московская\nРайон: Митино\nБюджет 90000", prof()
+    )
+    assert order.place == "Район: Митино"
+
+
 def test_no_budget():
     order = extract("Замена смесителя", prof())
     assert order.budget is None
