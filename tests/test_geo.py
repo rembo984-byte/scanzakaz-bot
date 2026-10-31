@@ -165,3 +165,26 @@ def test_real_moskovsky_needs_city():
     assert match(index, "Ремонт, Московская область") is None
     assert match(index, "Московский район, СПб") is None
     assert match(index, "Московский район", "spb")[2] == "Московский, СПб"
+
+
+def test_detect_area_region():
+    assert detect_area("Укладка плитки, Московская область") == "moscow"
+    assert detect_area("Московская область, Одинцово") == "moscow"
+    assert detect_area("Ленинградская область, Всеволожск") == "spb"
+    assert detect_area("Ленобласть, Мурино") == "spb"
+
+
+def test_detect_area_region_without_city():
+    assert detect_area("Подмосковье, Одинцово") == "moscow"
+    assert detect_city("Подмосковье, Одинцово") is None
+
+
+def test_detect_area_keeps_city_first():
+    assert detect_area("Санкт-Петербург, Московский район") == "spb"
+    assert detect_area("Укладка плитки, Москва") == "moscow"
+
+
+def test_region_not_confused_with_district():
+    index = load_index(make_table(ENTRIES), )
+    assert match(index, "Красносельский", "moscow")[0] == 55.775
+    assert match(index, "Красносельский", "spb")[0] == 59.83
