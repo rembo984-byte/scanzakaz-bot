@@ -28,18 +28,21 @@ def assess(profile: Profile, order: Order, money: Money) -> MaterialsVerdict:
 
     price = money.amount
     budget = order.budget
+
+    # Материалы клиента: вердикт не зависит от бюджета — расходов на материалы нет.
+    if order.materials is MaterialMode.CLIENT:
+        if price is None or not budget or budget <= 0:
+            return MaterialsVerdict("pass", note="клиент берёт материалы на себя")
+        return _direct(price, budget, "материалы клиента")
+
+    # Сравнивать не с чем: отчёт уже объясняет, чего не хватает.
     if price is None or not budget or budget <= 0:
-        return MaterialsVerdict(
-            "unknown", note="нет бюджета или расчёта — вердикт по материалам невозможен"
-        )
+        return MaterialsVerdict("unknown")
 
     if order.segment is Segment.CONSTRUCTION:
         return MaterialsVerdict(
             "unknown", note="стройка: доля материалов непредсказуема, вердикта нет"
         )
-
-    if order.materials is MaterialMode.CLIENT:
-        return _direct(price, budget, "материалы клиента")
 
     if order.materials is MaterialMode.EXPLICIT and order.materials_sum:
         work_budget = budget - order.materials_sum
