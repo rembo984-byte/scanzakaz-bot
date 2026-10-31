@@ -14,6 +14,33 @@ _OCR_DIGITS = {
 
 _NUMISH = re.compile(r"[0-9ОоOoЗзlI|][0-9ОоOoЗзlI|., \u00a0]*[0-9ОоOoЗзlI|]|[0-9]")
 
+_AMOUNT_RE = re.compile(
+    r"(\d{1,3}(?:[ \u00a0]\d{3})+|\d+(?:[.,]\d+)?)"
+    r"(?:[ \u00a0]*(млн|миллион\w*|тыс\w*|к(?![а-яё])|k(?![a-z])))?",
+    re.I,
+)
+
+_AREA_RE = re.compile(
+    r"(\d+(?:[.,]\d+)?)\s*(?:м2|м²|кв\.?\s?м|квадрат\w*|m2)",
+    re.I,
+)
+
+_BUDGET_HINT = re.compile(r"бюджет|стоимост|цена|заплат", re.I)
+_MATERIALS_LINE = re.compile(r"материал", re.I)
+
+_CLIENT_MATERIALS = re.compile(
+    r"материал\w*\s+(?:клиент|заказчик|ваш|свои)|материалы\s+есть|со\s+своими\s+материалами",
+    re.I,
+)
+_INCLUSIVE = re.compile(
+    r"с\s+материалами|под\s+ключ|материал\w*\s+включен\w*|включая\s+материал",
+    re.I,
+)
+_EXPLICIT = re.compile(
+    r"материал\w*\s+(?:на|около|примерно)\s*[\d \u00a0.,]+",
+    re.I,
+)
+
 
 def fix_ocr(text: str) -> str:
     """'1 ООО ООО' -> '1 000 000'. Слова не трогает: нужен хотя бы один реальный цифровой символ."""
@@ -23,16 +50,6 @@ def fix_ocr(text: str) -> str:
             return frag
         return "".join(_OCR_DIGITS.get(c, c) for c in frag)
     return _NUMISH.sub(repl, text or "")
-
-
-_AMOUNT_RE = re.compile(
-    r"(\d{1,3}(?:[ \u00a0]\d{3})+|\d+(?:[.,]\d+)?)"
-    r"(?:[ \u00a0]*(млн|миллион\w*|тыс\w*|к(?![а-яё])|k(?![a-z])))?",
-    re.I,
-)
-
-_BUDGET_HINT = re.compile(r"бюджет|стоимост|цена|заплат", re.I)
-_MATERIALS_LINE = re.compile(r"материал", re.I)
 
 
 def parse_amount(raw: str) -> int | None:
@@ -50,7 +67,7 @@ def parse_amount(raw: str) -> int | None:
 
 
 def parse_budget(text: str) -> int | None:
-    """Строка со словом 'бюджет', минуя строки про материалы."""
+    """Бюджет: строка с подсказкой, затем самое крупное число вне площади."""
     fixed = fix_ocr(text)
 
     for line in fixed.splitlines():
@@ -62,13 +79,8 @@ def parse_budget(text: str) -> int | None:
     if _MATERIALS_LINE.search(fixed) and _EXPLICIT.search(fixed):
         return None
 
-    return parse_amount(fixed)
-
-
-_AREA_RE = re.compile(
-    r"(\d+(?:[.,]\d+)?)\s*(?:м2|м²|кв\.?\s?м|квадрат\w*|m2)",
-    re.I,
-)
+    # Площадь бюджетом не считается: «Укладка плитки 6 м2» — это заказ без бюджета.
+    return parse_amount(_AREA_RE.sub(" ", fixed))
 
 
 def parse_area(text: str) -> float | None:
@@ -77,20 +89,6 @@ def parse_area(text: str) -> float | None:
     if not m:
         return None
     return float(m.group(1).replace(",", "."))
-
-
-_CLIENT_MATERIALS = re.compile(
-    r"материал\w*\s+(?:клиент|заказчик|ваш|свои)|материалы\s+есть|со\s+своими\s+материалами",
-    re.I,
-)
-_INCLUSIVE = re.compile(
-    r"с\s+материалами|под\s+ключ|материал\w*\s+включен\w*|включая\s+материал",
-    re.I,
-)
-_EXPLICIT = re.compile(
-    r"материал\w*\s+(?:на|около|примерно)\s*[\d \u00a0.,]+",
-    re.I,
-)
 
 
 def materials_mode(text: str) -> tuple[MaterialMode, int | None]:
