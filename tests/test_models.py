@@ -26,7 +26,7 @@ def test_order_defaults():
     assert o.segment is Segment.UNKNOWN
     assert o.materials is MaterialMode.UNKNOWN
     assert o.area_m2 is None and o.object_m2 is None
-    assert o.title == "" and o.place == ""
+    assert o.title == "" and o.place == "" and o.city == ""
 
 
 def test_order_non_positive_budget_is_none():
@@ -56,6 +56,13 @@ def test_order_bad_strings_fall_back():
     o = Order(segment="???", materials="???")
     assert o.segment is Segment.UNKNOWN
     assert o.materials is MaterialMode.UNKNOWN
+
+
+def test_order_city_normalised():
+    assert Order(city="Химки").city == "moscow"
+    assert Order(city="Московская область").city == "moscow"
+    assert Order(city="Всеволожск").city == "spb"
+    assert Order(city="Казань").city == ""
 
 
 def test_money_defaults():
@@ -90,9 +97,45 @@ def test_profile_city_normalised():
     assert Profile(user_id=1, city="Казань").city == ""
 
 
+def test_city_towns_moscow_region():
+    assert Profile(user_id=1, city="Химки").city == "moscow"
+    assert Profile(user_id=1, city="Мытищи").city == "moscow"
+    assert Profile(user_id=1, city="Красногорск").city == "moscow"
+    assert Profile(user_id=1, city="Подольск").city == "moscow"
+
+
+def test_city_towns_leningrad_region():
+    assert Profile(user_id=1, city="Всеволожск").city == "spb"
+    assert Profile(user_id=1, city="Мурино").city == "spb"
+    assert Profile(user_id=1, city="Кудрово").city == "spb"
+    assert Profile(user_id=1, city="Гатчина").city == "spb"
+
+
+def test_city_region_names():
+    assert Profile(user_id=1, city="Московская область").city == "moscow"
+    assert Profile(user_id=1, city="Подмосковье").city == "moscow"
+    assert Profile(user_id=1, city="Ленинградская область").city == "spb"
+    assert Profile(user_id=1, city="Ленобласть").city == "spb"
+
+
+def test_city_prefix_case_and_dash():
+    assert Profile(user_id=1, city="г. Химки").city == "moscow"
+    assert Profile(user_id=1, city="город Красногорск").city == "moscow"
+    assert Profile(user_id=1, city="Санкт-Петербург").city == "spb"
+    assert Profile(user_id=1, city="наро-фоминск").city == "moscow"
+    assert Profile(user_id=1, city="КОРОЛЁВ").city == "moscow"
+
+
+def test_city_unknown_stays_empty():
+    assert Profile(user_id=1, city="Казань").city == ""
+    assert Profile(user_id=1, city="Новосибирск").city == ""
+    assert Profile(user_id=1, city="Минск").city == ""
+
+
 def test_profile_travel_mode_fallback():
     assert Profile(user_id=1, travel_mode="walk").travel_mode == "radius"
     assert Profile(user_id=1, travel_mode="anywhere").travel_mode == "anywhere"
+    assert Profile(user_id=1, travel_mode="region").travel_mode == "region"
 
 
 def test_profile_radius_fallback():
@@ -100,12 +143,36 @@ def test_profile_radius_fallback():
     assert Profile(user_id=1, travel_radius_km=50).travel_radius_km == 50
 
 
+def test_covers_same_agglomeration():
+    p = Profile(user_id=1, city="moscow", travel_mode="region")
+    assert p.covers("moscow") is True
+    assert p.covers("Химки") is True
+    assert p.covers("Московская область") is True
+    assert p.covers("spb") is False
+
+
+def test_covers_anywhere():
+    p = Profile(user_id=1, city="moscow", travel_mode="anywhere")
+    assert p.covers("spb") is True
+
+
+def test_covers_without_city():
+    assert Profile(user_id=1, city="").covers("spb") is True
+
+
+def test_covers_unknown_place():
+    p = Profile(user_id=1, city="moscow")
+    assert p.covers("") is True
+    assert p.covers("Тверь") is True
+
+
 def test_profile_roundtrip():
     p = Profile(
         user_id=7,
         segment=Segment.CLEANING,
-        city="spb",
+        city="Химки",
         min_order_price=3000,
+        travel_mode="region",
         travel_radius_km=25.0,
     )
     assert Profile.from_dict(p.as_dict()) == p
