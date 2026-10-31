@@ -75,10 +75,21 @@ def test_penalty_capped_in_scoring():
     assert a.score == 70
 
 
-def test_no_budget_no_bonus():
+def test_no_budget_still_counts():
     a = build(None, 3500, econ="unknown")
+    assert a.score == 70
+    assert a.verdict == "take"
+
+
+def test_no_budget_no_positive_signals():
+    a = build(None, 3500, mat="unknown", econ="unknown")
     assert a.score == 60
     assert a.verdict == "think"
+
+
+def test_no_budget_and_no_price():
+    a = build(None, 0, mat="unknown", econ="unknown")
+    assert a.score == 50
 
 
 def test_reasons_collected():
