@@ -95,3 +95,11 @@ def test_budget_ignores_materials_line():
 
 def test_no_budget_when_only_materials_sum():
     assert parse_budget("Ремонт\nМатериалы на 45 000 ₽") is None
+
+
+def test_area_is_not_budget():
+    assert parse_budget("Укладка плитки\nПлощадь 6 м2") is None
+
+
+def test_area_stripped_but_bare_amount_kept():
+    assert parse_budget("Укладка плитки 6 м2\n90000") == 90_000
