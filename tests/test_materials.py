@@ -76,6 +76,11 @@ def test_unknown_mode_is_neutral():
     assert v.adds_penalty is False
 
 
+def test_client_without_budget_is_pass():
+    v = assess(prof(), Order(materials=MaterialMode.CLIENT), Money(3500, "min"))
+    assert v.verdict == "pass"
+    assert v.note == "клиент берёт материалы на себя"
+
 def test_no_budget():
     v = assess(prof(), Order(materials=MaterialMode.INCLUSIVE), Money(3500, "min"))
     assert v.verdict == "unknown"
