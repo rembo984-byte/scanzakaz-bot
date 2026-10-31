@@ -13,6 +13,7 @@ TAKE_THRESHOLD = 70
 THINK_THRESHOLD = 45
 MATERIALS_BONUS = 10
 MATERIALS_PENALTY = 15
+NO_BUDGET_POINTS = 10   # бюджет не назван: не штраф и не потолок вердикта
 
 
 @dataclass(frozen=True)
@@ -35,8 +36,12 @@ def verdict_for(score: int) -> str:
 
 
 def _budget_points(budget: int | None, money: Money) -> tuple[int, str]:
-    if not budget or not money.amount or budget <= 0:
+    """Плюс за укладывание в бюджет. Бюджет не назван — не наказываем за неизвестность."""
+    if not money.amount:
         return 0, ""
+    if not budget or budget <= 0:
+        return NO_BUDGET_POINTS, "бюджет не назван — считаем от вашего минимума"
+
     delta = (money.amount - budget) / budget
     if delta <= -0.30:
         return 25, f"вы дешевле бюджета на {abs(delta):.0%}"
