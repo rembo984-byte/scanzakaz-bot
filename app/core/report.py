@@ -35,7 +35,9 @@ def render(a: Assessment, order: Order) -> str:
 
     lines.append(_econ(a))
 
-    if a.money.source == "min" and a.money.amount:
+    if not order.budget and a.money.amount:
+        lines.append("_Бюджета в карточке нет — цену называете вы._")
+    elif a.money.source == "min" and a.money.amount:
         lines.append(f"_Прайс: минимум {_fmt(a.money.amount)} ₽ за заказ_")
 
     return "\n".join(lines)
@@ -50,7 +52,7 @@ def _econ(a: Assessment) -> str:
             f"Отклик {e.cost} ₽. Один заказ стоит вам {_fmt(e.per_order or 0)} ₽ — "
             f"при чеке ниже {_fmt(e.break_even or 0)} ₽ отклик не окупается."
         )
-    if e.verdict == "worth":
+    if e.verdict == "worth" and e.share_pct is not None:
         share = str(e.share_pct).replace(".", ",")
         return f"Отклик {e.cost} ₽ ({share}% чека) — окупается с запасом."
     return f"Отклик {e.cost} ₽. Порог окупаемости — {_fmt(e.break_even or 0)} ₽."
