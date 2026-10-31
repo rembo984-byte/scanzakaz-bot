@@ -13,7 +13,7 @@ TAKE_THRESHOLD = 70
 THINK_THRESHOLD = 45
 MATERIALS_BONUS = 10
 MATERIALS_PENALTY = 15
-NO_BUDGET_POINTS = 10   # бюджет не назван: не штраф и не потолок вердикта
+NO_BUDGET_POINTS = 15   # бюджет не назван: не штраф и не потолок вердикта
 
 
 @dataclass(frozen=True)
