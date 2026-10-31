@@ -6,9 +6,17 @@ from app.core.report import render
 from app.core.scoring import assess
 
 
-def build(econ="worth", mat="pass", mat_note="", penalty=0, log_note="", cost=300):
+def build(
+    econ="worth",
+    mat="pass",
+    mat_note="",
+    penalty=0,
+    log_note="",
+    cost=300,
+    budget=12000,
+):
     profile = Profile(user_id=1, min_order_price=3500)
-    order = Order(budget=12000, title="Укладка плитки")
+    order = Order(budget=budget, title="Укладка плитки")
     a = assess(
         profile,
         order,
@@ -48,6 +56,12 @@ def test_waste_line():
 
 def test_no_cost_hint():
     assert "Цена отклика не задана" in build(econ="unknown", cost=None)
+
+
+def test_no_budget_hint():
+    text = build(budget=None)
+    assert "Бюджета в карточке нет" in text
+    assert "Прайс: минимум" not in text
 
 
 def test_logistics_only_when_penalty():
