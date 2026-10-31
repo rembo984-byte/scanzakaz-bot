@@ -13,41 +13,70 @@ ROAD_FACTOR = 1.3
 TABLE_PATH = "data/districts.json"
 
 Point = tuple[float, float, str]
+Candidate = tuple[Point, str, bool]   # точка, город, требует подсказки города
+
+CITY_HINTS = {
+    "spb": ("санкт-петербург", "петербург", "спб", "питер", "ленинград"),
+    "moscow": ("москв", "мск"),
+}
 
 
 @lru_cache(maxsize=4)
-def load_index(path: str = TABLE_PATH) -> dict[str, Point]:
-    """Алиас -> точка. Читается один раз за жизнь процесса."""
+def load_index(path: str = TABLE_PATH) -> dict[str, list[Candidate]]:
+    """Алиас -> все записи с этим алиасом. Читается один раз за жизнь процесса."""
     try:
         with open(path, encoding="utf-8") as fh:
             data = json.load(fh)
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
-    index: dict[str, Point] = {}
+    index: dict[str, list[Candidate]] = {}
     for entry in data.get("districts", []):
         try:
             point: Point = (float(entry["lat"]), float(entry["lon"]), entry["label"])
+            city = str(entry["city"])
         except (KeyError, TypeError, ValueError):
             continue
+        strict = bool(entry.get("strict", False))
         for alias in entry.get("aliases", []):
-            index[alias.lower()] = point
+            index.setdefault(alias.lower(), []).append((point, city, strict))
     return index
 
 
-def match(index: dict[str, Point], place: str) -> Point | None:
-    """Побеждает самый длинный совпавший алиас: 'приморский район' точнее 'приморск'."""
+def detect_city(text: str) -> str | None:
+    """Город, названный в тексте карточки. Регистр не важен."""
+    low = (text or "").lower()
+    for city, hints in CITY_HINTS.items():
+        if any(hint in low for hint in hints):
+            return city
+    return None
+
+
+def match(
+    index: dict[str, list[Candidate]], place: str, city: str | None = None
+) -> Point | None:
+    """Побеждает самый длинный алиас. Неоднозначность без города -> None, не угадываем."""
     low = (place or "").strip().lower()
     if not low:
         return None
 
-    best_len = 0
-    best: Point | None = None
-    for alias, point in index.items():
-        if alias in low and len(alias) > best_len:
-            best_len = len(alias)
-            best = point
-    return best
+    found: list[tuple[int, Candidate]] = []
+    for alias, candidates in index.items():
+        if alias in low:
+            for candidate in candidates:
+                found.append((len(alias), candidate))
+    if not found:
+        return None
+
+    longest = max(length for length, _ in found)
+    pool = [candidate for length, candidate in found if length == longest]
+
+    if city:
+        pool = [c for c in pool if c[1] == city]
+    else:
+        pool = [c for c in pool if not c[2]]
+
+    return pool[0][0] if len(pool) == 1 else None
 
 
 def distance_km(a_lat: float, a_lon: float, b_lat: float, b_lon: float) -> float:
@@ -61,13 +90,19 @@ def distance_km(a_lat: float, a_lon: float, b_lat: float, b_lon: float) -> float
     return round(straight * ROAD_FACTOR, 1)
 
 
-async def resolve(redis: aioredis.Redis, place: str) -> Point | None:
-    """Сначала память, потом кэш. При промахе — в очередь, возврат None без сети."""
+async def resolve(
+    redis: aioredis.Redis,
+    place: str,
+    city: str | None = None,
+    path: str = TABLE_PATH,
+) -> Point | None:
+    """Город из текста важнее профиля. Промах уходит в очередь, ответа не ждём."""
     low = (place or "").strip().lower()
     if not low:
         return None
 
-    hit = match(load_index(), low)
+    known_city = detect_city(low) or city
+    hit = match(load_index(path), low, known_city)
     if hit:
         return hit
 
@@ -76,5 +111,5 @@ async def resolve(redis: aioredis.Redis, place: str) -> Point | None:
         item = json.loads(cached)
         return float(item["lat"]), float(item["lon"]), item["label"]
 
-    await redis.sadd(PENDING_KEY, low[:120])
+    await redis.sadd(PENDING_KEY, f"{known_city or '-'}|{low}"[:150])
     return None
