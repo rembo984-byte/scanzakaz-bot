@@ -8,10 +8,15 @@ from app.core.normalize import materials_mode, parse_area, parse_budget
 from app.core.segment import classify
 
 _TURNKEY_HINT = re.compile(r"под\s+ключ", re.I)
-_PLACE_HINT = re.compile(
-    r"район|р-н|метро|улиц|ул\.|проспект|шоссе|переулок|набережн|бульвар|проезд|област|округ",
+
+# Точный адрес: район, метро, улица. Ищем в первую очередь.
+_PLACE_PRECISE = re.compile(
+    r"район|р-н|метро|улиц|ул\.|проспект|шоссе|переулок|набережн|бульвар|проезд",
     re.I,
 )
+# Крупная единица: область, край, округ. Районом не является — только запасной вариант.
+_PLACE_COARSE = re.compile(r"област|округ|край", re.I)
+
 _TITLE_MAX = 60
 _PLACE_MAX = 120
 
@@ -52,10 +57,12 @@ def _areas(
 
 
 def _place(text: str) -> str:
-    """Строка, похожая на адрес. Разбор по районам — в services/geo.py."""
-    for line in text.splitlines():
-        if _PLACE_HINT.search(line):
-            return line.strip()[:_PLACE_MAX]
+    """Сначала строка с районом или улицей, только потом с областью. Иначе пусто."""
+    lines = text.splitlines()
+    for pattern in (_PLACE_PRECISE, _PLACE_COARSE):
+        for line in lines:
+            if pattern.search(line):
+                return line.strip()[:_PLACE_MAX]
     return ""
 
 
