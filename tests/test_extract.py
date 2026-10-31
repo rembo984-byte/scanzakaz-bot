@@ -55,6 +55,18 @@ def test_empty_text():
     assert order.title == ""
 
 
+def test_place_detected():
+    order = extract("Укладка плитки\nРайон Митино\nБюджет 90000", prof())
+    assert "Митино" in order.place
+
+
+def test_place_empty_when_no_address():
+    assert extract("Замена смесителя", prof()).place == ""
+
+
+def test_place_keeps_full_line():
+    order = extract("Ремонт\nМосковская область, Одинцово\nБюджет 90000", prof())
+    assert order.place == "Московская область, Одинцово"
 def test_no_budget():
     order = extract("Замена смесителя", prof())
     assert order.budget is None
