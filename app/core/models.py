@@ -19,8 +19,118 @@ class MaterialMode(str, Enum):
     UNKNOWN = "unknown"      # в карточке об этом ни слова
 
 
+# Агломерации, а не города: Москва + область, Петербург + Ленинградская область.
 CITIES: frozenset[str] = frozenset({"moscow", "spb"})
-TRAVEL_MODES = ("radius", "anywhere")
+
+# radius — выезд до travel_radius_km; region — вся агломерация; anywhere — без ограничений.
+TRAVEL_MODES = ("radius", "region", "anywhere")
+
+# Как мастер назовёт место -> агломерация. Ключи уже нормализованы: нижний регистр,
+# без дефисов, точек и «ё».
+CITY_ALIASES: dict[str, str] = {
+    # --- Москва и область ---
+    "moscow": "moscow",
+    "москва": "moscow",
+    "мск": "moscow",
+    "msk": "moscow",
+    "московская область": "moscow",
+    "московская обл": "moscow",
+    "подмосковье": "moscow",
+    "химки": "moscow",
+    "мытищи": "moscow",
+    "балашиха": "moscow",
+    "красногорск": "moscow",
+    "одинцово": "moscow",
+    "люберцы": "moscow",
+    "долгопрудный": "moscow",
+    "королев": "moscow",
+    "реутов": "moscow",
+    "видное": "moscow",
+    "лыткарино": "moscow",
+    "жуковский": "moscow",
+    "раменское": "moscow",
+    "домодедово": "moscow",
+    "подольск": "moscow",
+    "щелково": "moscow",
+    "пушкино": "moscow",
+    "ногинск": "moscow",
+    "электросталь": "moscow",
+    "коломна": "moscow",
+    "серпухов": "moscow",
+    "наро фоминск": "moscow",
+    "истра": "moscow",
+    "дмитров": "moscow",
+    "лобня": "moscow",
+    "апрелевка": "moscow",
+    "коммунарка": "moscow",
+    "троицк": "moscow",
+    "зеленоград": "moscow",
+    "котельники": "moscow",
+    "путилково": "moscow",
+    "барвиха": "moscow",
+    # --- Петербург и Ленинградская область ---
+    "spb": "spb",
+    "спб": "spb",
+    "питер": "spb",
+    "петербург": "spb",
+    "санкт петербург": "spb",
+    "ленинград": "spb",
+    "ленинградская область": "spb",
+    "ленинградская обл": "spb",
+    "ленобласть": "spb",
+    "лен обл": "spb",
+    "всеволожск": "spb",
+    "мурино": "spb",
+    "кудрово": "spb",
+    "гатчина": "spb",
+    "колпино": "spb",
+    "пушкин": "spb",
+    "петергоф": "spb",
+    "сестрорецк": "spb",
+    "сертолово": "spb",
+    "тосно": "spb",
+    "кронштадт": "spb",
+    "шушары": "spb",
+    "ломоносов": "spb",
+    "стрельна": "spb",
+    "красное село": "spb",
+    "сосновый бор": "spb",
+    "приозерск": "spb",
+    "кириши": "spb",
+    "волхов": "spb",
+    "тихвин": "spb",
+}
+
+
+def _norm(raw: str | None) -> str:
+    """Нижний регистр, без «ё», дефисов и точек, одиночные пробелы."""
+    text = str(raw or "").lower().replace("ё", "е")
+    for ch in "-–—.,()№":
+        text = text.replace(ch, " ")
+    text = " ".join(text.split())
+    for prefix in ("г ", "город ", "гор "):
+        if text.startswith(prefix):
+            text = text[len(prefix):]
+    return text
+
+
+def canon_city(raw: str | None) -> str:
+    """'  СПб  ' -> 'spb', 'Химки' -> 'moscow'. Неизвестное место -> ''."""
+    key = _norm(raw)
+    if not key:
+        return ""
+
+    hit = CITY_ALIASES.get(key)
+    if hit:
+        return hit
+
+    # «Москва и область», «Ленинградская обл.» и прочие составные записи.
+    if "обл" in key or "област" in key:
+        if "московск" in key or "подмосков" in key:
+            return "moscow"
+        if "ленинград" in key or "лен" in key or "петербург" in key:
+            return "spb"
+    return ""
 
 
 @dataclass(frozen=True)
@@ -47,7 +157,7 @@ class Profile:
 
     user_id: int = 0
     segment: Segment = Segment.REPAIR
-    city: str = ""                    # moscow | spb — где работает мастер
+    city: str = ""                    # moscow | spb — агломерация, где работает мастер
     min_order_price: int = 0          # минимальный чек за заказ
     area_rate: int | None = None      # цена за м² поверхности
     turnkey_rate: int | None = None   # цена за м² объекта под ключ
@@ -55,7 +165,7 @@ class Profile:
     visit_cost: int = 0               # цена выезда, подсказкой в отчёте
     margin: float = 0.0               # доля прибыли; 0 = взять по сегменту
     conversion: float = 0.0           # конверсия отклика; 0 = взять 0.15
-    travel_mode: str = "radius"       # radius | anywhere
+    travel_mode: str = "radius"       # radius | region | anywhere
     travel_radius_km: float = 30.0
 
     def __post_init__(self) -> None:
@@ -65,9 +175,7 @@ class Profile:
             except ValueError:
                 self.segment = Segment.REPAIR
 
-        self.city = (self.city or "").strip().lower()
-        if self.city not in CITIES:
-            self.city = ""
+        self.city = canon_city(self.city)
 
         if self.travel_mode not in TRAVEL_MODES:
             self.travel_mode = "radius"
@@ -80,6 +188,22 @@ class Profile:
             self.margin = 0.0
         if not (0 < self.conversion <= 1):
             self.conversion = 0.0
+
+    def covers(self, city: str | None) -> bool:
+        """Работает ли мастер по карточке из этого места.
+
+        anywhere — везде. Город не задан — не сужаем. Место не распознано —
+        тоже не сужаем: отсекать по неизвестному нельзя.
+        """
+        if self.travel_mode == "anywhere":
+            return True
+        if not self.city:
+            return True
+
+        other = canon_city(city)
+        if not other:
+            return True
+        return other == self.city
 
     def as_dict(self) -> dict:
         """Готово к json.dumps и к Redis: enum-ы уже строками."""
@@ -125,6 +249,7 @@ class Order:
     materials: MaterialMode = MaterialMode.UNKNOWN
     materials_sum: int | None = None
     place: str = ""                    # район или метро из текста
+    city: str = ""                     # агломерация карточки, если распознана
     title: str = ""
     raw: str = ""
 
@@ -150,6 +275,7 @@ class Order:
         if self.materials_sum is not None and self.materials_sum <= 0:
             self.materials_sum = None
 
+        self.city = canon_city(self.city)
         self.place = (self.place or "").strip()
         self.title = (self.title or "").strip()
 
