@@ -16,9 +16,16 @@ TABLE_PATH = "data/districts.json"
 Point = tuple[float, float, str]
 Candidate = tuple[Point, str, bool]   # точка, город, требует подсказки города
 
+# Только явное название города. «Московская» сюда не попадает: в ней нет «москв».
 CITY_PATTERNS = {
     "spb": re.compile(r"санкт[\s-]?петербург|петербург|\bспб\b|\bпитер\b|ленинград", re.I),
-    "moscow": re.compile(r"москв|\bмск\b", re.I),
+    "moscow": re.compile(r"\bмск\b|\bмоскв[аыуеой]\b", re.I),
+}
+
+# Область вокруг города: агломерация. Проверяется только если города в тексте нет.
+REGION_PATTERNS = {
+    "spb": re.compile(r"ленинград\w*|лен\s*обл\w*|ленобласт\w*", re.I),
+    "moscow": re.compile(r"подмосков\w*|московск\w*|мо\s*обл\w*", re.I),
 }
 
 
@@ -45,11 +52,24 @@ def load_index(path: str = TABLE_PATH) -> dict[str, list[Candidate]]:
 
 
 def detect_city(text: str) -> str | None:
-    """Город, названный в тексте. Петербург проверяется первым: он точнее."""
+    """Город, названный в тексте явно. Петербург проверяется первым: он точнее."""
     low = text or ""
     for city, pattern in CITY_PATTERNS.items():
         if pattern.search(low):
             return city
+    return None
+
+
+def detect_area(text: str) -> str | None:
+    """Агломерация: город или его область. Нужна для карточек «Московская область»."""
+    hit = detect_city(text)
+    if hit:
+        return hit
+
+    low = text or ""
+    for area, pattern in REGION_PATTERNS.items():
+        if pattern.search(low):
+            return area
     return None
 
 
@@ -97,12 +117,12 @@ async def resolve(
     city: str | None = None,
     path: str = TABLE_PATH,
 ) -> Point | None:
-    """Город из текста важнее профиля. Промах уходит в очередь, ответа не ждём."""
+    """Агломерация из текста важнее профиля. Промах уходит в очередь, ответа не ждём."""
     low = (place or "").strip().lower()
     if not low:
         return None
 
-    known_city = detect_city(low) or city
+    known_city = detect_area(low) or city
     hit = match(load_index(path), low, known_city)
     if hit:
         return hit
