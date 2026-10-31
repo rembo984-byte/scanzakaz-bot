@@ -16,8 +16,12 @@ def render(a: Assessment, order: Order) -> str:
     lines = [f"{EMOJI[a.verdict]} {LABEL[a.verdict]} · {a.score}/100"]
 
     title = (order.title or "").strip()
-    budget = f"{_fmt(order.budget)} ₽" if order.budget else "бюджет не указан"
-    lines.append(f"{title}, {budget}" if title else f"Бюджет: {budget}")
+
+    if order.budget:
+        budget = f"{_fmt(order.budget)} ₽"
+        lines.append(f"{title}, бюджет {budget}" if title else f"Бюджет: {budget}")
+    else:
+        lines.append(f"{title}, бюджет не указан" if title else "Бюджет не указан")
 
     if a.money.amount:
         lines.append(f"Ваш расчёт: {_fmt(a.money.amount)} ₽ ({a.money.note})")
@@ -30,7 +34,7 @@ def render(a: Assessment, order: Order) -> str:
         else:
             lines.append(f"Материалы: {a.materials.note}")
 
-    if a.logistics.known and a.logistics.penalty:
+    if a.logistics.penalty and a.logistics.note:
         lines.append(f"Выезд: {a.logistics.note}")
 
     lines.append(_econ(a))
