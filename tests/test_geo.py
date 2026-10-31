@@ -132,6 +132,8 @@ def test_detect_city():
     assert detect_city("Укладка плитки, Москва") == "moscow"
     assert detect_city("м. Пионерская, СПб") == "spb"
     assert detect_city("Ремонт в Хамовниках") is None
+    assert detect_city("Подмосковье, Одинцово") is None
+    assert detect_city("Санкт-Петербург, Московский район") == "spb"
 
 
 def test_real_table_loads():
@@ -161,4 +163,5 @@ def test_real_moskovsky_needs_city():
     load_index.cache_clear()
     index = load_index("data/districts.json")
     assert match(index, "Ремонт, Московская область") is None
-    assert match(index, "Московский район, СПб")[2] == "Московский, СПб"
+    assert match(index, "Московский район, СПб") is None
+    assert match(index, "Московский район", "spb")[2] == "Московский, СПб"
