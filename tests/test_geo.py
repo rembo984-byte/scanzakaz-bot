@@ -1,7 +1,14 @@
 import asyncio
 import json
 
-from app.services.geo import detect_city, distance_km, load_index, match, resolve
+from app.services.geo import (
+    detect_area,
+    detect_city,
+    distance_km,
+    load_index,
+    match,
+    resolve,
+)
 
 
 class FakeRedis:
@@ -30,6 +37,8 @@ ENTRIES = [
      "lat": 59.83, "lon": 30.17},
     {"city": "moscow", "label": "Красносельский, Москва", "aliases": ["красносельск"],
      "lat": 55.775, "lon": 37.66},
+    {"city": "spb", "label": "Московский, СПб", "aliases": ["московский район", "московский"],
+     "lat": 59.85, "lon": 30.32, "strict": True},
 ]
 
 
@@ -184,7 +193,13 @@ def test_detect_area_keeps_city_first():
     assert detect_area("Укладка плитки, Москва") == "moscow"
 
 
-def test_region_not_confused_with_district():
-    index = load_index(make_table(ENTRIES), )
-    assert match(index, "Красносельский", "moscow")[0] == 55.775
-    assert match(index, "Красносельский", "spb")[0] == 59.83
+def test_area_ignores_district_name():
+    assert detect_area("Московский район") is None
+    assert detect_area("Ремонт на Московском проспекте") is None
+
+
+def test_region_decides_city_for_district(tmp_path):
+    path = make_table(tmp_path)
+    redis = FakeRedis()
+    point = asyncio.run(resolve(redis, "Красносельский, Московская область", "spb", path))
+    assert point[0] == 55.775
